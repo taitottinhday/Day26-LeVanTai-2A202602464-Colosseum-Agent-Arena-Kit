@@ -16,6 +16,6 @@
 - Demo `agent.gateway`, `agent.guardrails`, `agent.strategy`, `eval.prosecute`: đều hoàn thành với exit code 0.
 - `python validate_deck.py`: 15 FAIL, 6 WARN khi chạy fixture world. Validator tự ghi nhận fixture thiếu world corpus thật; các anchor/drift và lethality chưa được kiểm chứng với release world.
 
-## Còn cần môi trường/tài khoản bên ngoài
+## Remaining external dependency
 
-Cần tải `world-df8c55dabb35` cùng checksum từ private GitHub release, xác minh SHA-256, rồi chạy validator với world đó và sửa deck theo kết quả thật. GitHub CLI đã cài nhưng phiên hiện tại chưa đăng nhập (`gh auth status` báo chưa có tài khoản). Sau khi đăng nhập, cần commit/push và xác minh trạng thái remote.
+Commit `ccb60b1` and the report update have been pushed to `main`. GitHub CLI now authenticates successfully as `taitottinhday`. However, the GitHub API returned an empty release list (`[]`), and the repository has no tag named `world-df8c55dabb35`; `gh release view world-df8c55dabb35` returned `release not found`. The real-world validation still needs the correct repository/release or the world archive and checksum. Until then, checksum verification and deck validation against the real corpus cannot be completed.
