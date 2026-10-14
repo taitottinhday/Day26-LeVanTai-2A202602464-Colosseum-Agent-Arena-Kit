@@ -1,4 +1,4 @@
-﻿# Báo cáo kiểm tra lab
+# Báo cáo kiểm tra lab
 
 ## Đã hoàn thành
 
