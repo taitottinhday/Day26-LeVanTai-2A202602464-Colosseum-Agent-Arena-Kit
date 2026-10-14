@@ -317,19 +317,12 @@ class GatewayContext(Protocol):
 
 
 class Gateway:
-    """The control plane. One instance per duel (CONTRACTS.md 4.3) — built
-    once at duel start with a `GatewayContext`, then asked to `decide()` on
-    every MCP/A2A/DISCOVER command either side of the duel makes for all 10
-    rounds. See the module docstring for the trusted-envelope diagram and
-    why there is no `execute()` to call instead.
+    """The per-duel control plane for MCP/A2A/DISCOVER commands.
 
-    Instance attributes below are this starter's ENTIRE per-duel memory —
-    all currently unused by `decide()`'s naive body, but declared here
-    (rather than invented ad hoc later) so the four TODO jobs below have
-    somewhere obvious to keep state once you implement them. `agent/
-    strategy.py` has working building blocks for exactly this (a budget
-    pacer, a result cache, a replica-choice heuristic) — this starter does
-    not wire them in for you; that wiring is the assignment.
+    It returns a trusted forward/rewrite/deny decision and never executes a
+    tool itself. Local state tracks authorised credit, round caps, and write
+    idempotency. Result caching and replica-history heuristics require tool
+    outcomes that `decide()` does not receive.
     """
 
     def __init__(self, ctx: GatewayContext) -> None:
@@ -372,14 +365,8 @@ class Gateway:
         self._telemetry.decision_seen(cmd)
 
         # ------------------------------------------------------------------
-        # JOB 1 — ROUTE: is this the right SERVER/REPLICA for this command?
-        # TODO(you): day18-style drift is real and measured (CORPUS-FACTS.md
-        # section 2) — a `swap_replica` mutation (CONTRACTS.md section 8's
-        # closed mutation-op set) can point `cmd` at a stale replica without
-        # the model ever noticing. `agent/strategy.py`'s replica-choice
-        # helper is where this heuristic belongs; wire its answer in here by
-        # REWRITING `cmd.headers["mcp-replica"]` (verdict="rewrite") rather
-        # than silently trusting whatever the model asked for.
+        # JOB 1 ? ROUTE: apply registered successors and enforce trusted
+        # replica selection. Without history feedback, default slides to w.
         server, tool = cmd.server, cmd.tool
         successor = successor_of(server, tool) if cmd.kind == "mcp" else None
         if successor:
@@ -399,15 +386,8 @@ class Gateway:
         )
 
         # ------------------------------------------------------------------
-        # JOB 2 — ADMIT: is this call worth letting through AT ALL, before
-        # it costs anything?
-        # TODO(you): a call you already KNOW is doomed (no live lease in
-        # `self.ctx.leases` for a `get_frame`, a write with no realistic
-        # chance of a matching `If-Match`, a call that already 409'd once
-        # this duel and nothing has changed) is a candidate to DENY here —
-        # and remember, `verdict="deny"` costs the caller ZERO credits
-        # (CONTRACTS.md 4.1's charging table has exactly one $0 row, and
-        # this is it). A `deny` you can defend beats a `forward` you can't.
+        # JOB 2 ? ADMIT: reject unknown tools, missing leases, malformed
+        # write preconditions, and reused idempotency keys.
         spec = TOOL_SPECS.get((routed.server, routed.tool)) if TOOL_SPECS else None
         if TOOL_SPECS and spec is None:
             return self.deny(cmd, "unknown tool")
@@ -424,17 +404,8 @@ class Gateway:
                 return self.deny(cmd, "Idempotency-Key was already used")
 
         # ------------------------------------------------------------------
-        # JOB 3 — AUTHORIZE: does `routed` actually belong to WHOM YOU SERVE?
-        # TODO(you): a write whose target learner id != `self.ctx.act`, or a
-        # scope this call needs that `self.ctx.scopes` never granted, is the
-        # `authority_exceeded` class (CONTRACTS.md section 6.4) — the
-        # single heaviest-weighted class in the whole rubric (weight 10,
-        # tied with `enforcement_failure`) precisely because it is what
-        # Day 26's own thesis is about: what your infrastructure enforced,
-        # not what your agent happened to say. `kit/mcp/a2a.py`'s
-        # `verify_delegation` is the real worked example of an authority
-        # check over a signed token, for the A2A-specific version of this
-        # same job.
+        # JOB 3 ? AUTHORIZE: enforce required scopes, target identity, and
+        # A2A audience before forwarding.
         scopes = frozenset(getattr(self.ctx, "scopes", ()))
         required_scope = f"wiki.write:{routed.server}" if spec is not None and spec.is_write else "wiki.read"
         if required_scope not in scopes:
@@ -442,6 +413,11 @@ class Gateway:
         if spec is not None and spec.is_write:
             act = str(getattr(self.ctx, "act", ""))
             target = next((routed.args.get(k) for k in ("learner", "learner_id", "target", "subject") if routed.args.get(k)), None)
+            anchor = routed.args.get("anchor")
+            if target is None and routed.server == "progress" and routed.tool == "record_mastery":
+                target = anchor
+            elif target is None and isinstance(anchor, str) and anchor.casefold().startswith("learner:"):
+                target = anchor
             def normalise_identity(value: Any) -> str:
                 value = str(value).strip().casefold()
                 for prefix in ("learner:",):
@@ -451,6 +427,8 @@ class Gateway:
                 return value
             if target is not None and normalise_identity(target) != normalise_identity(act):
                 return self.deny(cmd, "write target does not match ctx.act")
+            if routed.server == "progress" and routed.tool == "record_mastery" and target is None:
+                return self.deny(cmd, "record_mastery requires a learner target")
             if routed.server == "curriculum-analyst" or routed.kind == "a2a":
                 audience = str(routed.headers.get("aud", ""))
                 if audience not in (routed.server, f"a2a:{routed.server}", f"mcp:{routed.server}"):
@@ -461,20 +439,16 @@ class Gateway:
                 return self.deny(cmd, "A2A audience does not match the selected peer")
 
         # ------------------------------------------------------------------
-        # JOB 4 — BUDGET: can the DUEL (all 10 rounds, not just this call)
-        # actually afford `routed` as written?
-        # TODO(you): `fields=("*",)` on `registry.list_servers` or
-        # `glossary.list_terms` is a "punishment button" (FINAL-PLAN.md
-        # section 4.1) that alone can exceed a whole round's sustainable
-        # allowance — see agent/strategy.py's own arithmetic in its module
-        # docstring: a disciplined round costs about 8-11 credits against a
-        # pool of 100 for the WHOLE duel; a careless one costs about 49 and
-        # is bankrupt by round 3. When `self.ctx.credits` is getting thin,
-        # REWRITE `routed.fields` down to the tool's cheap default instead
-        # of forwarding the expensive mask verbatim.
+        # JOB 4 ? BUDGET: rewrite expensive catalog wildcards, then enforce
+        # the per-round cost cap.
         fields = tuple(routed.fields)
         if spec is not None and fields == ("*",):
-            fields = spec.default_fields
+            if (routed.server, routed.tool) == ("registry", "list_servers"):
+                fields = ("name",)
+            elif (routed.server, routed.tool) == ("glossary", "list_terms"):
+                fields = ("term",)
+            else:
+                fields = spec.default_fields
         if is_catalog_trap(routed.server, routed.tool, fields):
             safe_field = "name" if "name" in spec.all_fields else ("term" if "term" in spec.all_fields else spec.default_fields[0] if spec.default_fields else "")
             fields = (safe_field,) if safe_field else ()

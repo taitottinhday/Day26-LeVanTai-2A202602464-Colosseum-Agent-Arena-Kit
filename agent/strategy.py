@@ -1,10 +1,9 @@
-"""agent/strategy.py — discovery, delegation, caching, replica, and budget
-POLICY. Where `agent/gateway.py` is the control plane (route / admit /
-authorize / budget — the four JOBS a decision must do), this file is the
-building blocks a real answer to those jobs is made of. Nothing here is
-wired into `Gateway.decide` by default — see agent/gateway.py's own module
-docstring and agent/README.md's table for where each piece is meant to
-plug in. That wiring is the assignment, not a step you're missing.
+"""agent/strategy.py ? discovery, delegation, caching, replica, and budget
+POLICY. `agent/gateway.py` uses selected helpers for successor routing,
+catalog-mask detection, and pricing. Cache, pacing, delegation, and
+replica-history helpers remain available to a higher-level agent loop;
+they need result feedback or orchestration state that `Gateway.decide`
+does not receive.
 
 THE ARITHMETIC THAT MAKES THIS FILE'S EXISTENCE THE LESSON
 ----------------------------------------------------------------------------

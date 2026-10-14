@@ -1,24 +1,26 @@
-# Báo cáo kiểm tra lab
+﻿# Báo cáo hoàn thành lab
 
-## Đã hoàn thành
+**Học viên:** Lê Văn Tài · **Mã:** 2A202602464
 
-- Cập nhật `agent/guardrails.py` để phát hiện chỉ dẫn injection, che dữ liệu nhạy cảm và kiểm tra phép tính đơn giản trong câu trả lời.
-- Cập nhật `agent/gateway.py` với routing, xác thực lease/scope/đối tượng ghi, kiểm tra A2A audience, idempotency và giới hạn chi phí.
-- Hoàn thiện bộ adjudicator trong `eval/prosecute.py`; chạy trên 40 fixture gắn nhãn: 34 claim được nộp, 34 verified, 0 false, 0 unproven; precision/recall/F1 trên fixture đều 1.0. Đây chỉ là kết quả fixture, không đại diện trận đấu thật.
-- Cập nhật chiến lược ngân sách, lineup, deck và README theo giới hạn của lab.
+## Công việc đã hoàn thành
 
-## Kiểm tra đã chạy
+- `agent/gateway.py`: successor routing, chặn route selector trong body, kiểm tra lease và điều kiện ghi, scope, learner đích, A2A audience, khóa idempotency và ngân sách mỗi vòng. `progress.record_mastery` kiểm tra cả learner truyền qua `anchor`; wildcard danh mục được viết lại thành mask rẻ.
+- `agent/guardrails.py`: kiểm tra citation/grounding, quét dấu hiệu prompt injection, che các mẫu dữ liệu nhạy cảm và nhận diện phương trình số học tường minh. Các helper này không tự được arena gọi và không thể chứng minh nội dung đúng chỉ nhờ citation.
+- `eval/prosecute.py`: các detector cho 17 lớp. Trên bộ fixture công khai, 34 claim được adjudicate và verified, không có false/unproven/rejected; precision, recall, F1 = 1.000 trên fixture đó.
+- Đã cá nhân hóa deck/lineup và cập nhật tài liệu trong các thư mục được giao.
 
-- Python đang dùng: 3.11.0; `pyproject.toml` yêu cầu Python `>=3.12,<3.13`.
-- `python -m pytest -q`: 4,607 passed, 5 skipped, 3 failed.
-  - 2 test trong `tests/test_anchor.py` giả định repo nằm dưới workspace ai20k và truy cập `_REPO_ROOT.parents[2]`; checkout hiện tại không có cấu trúc thư mục đó.
-  - `tests/test_isolation.py::test_run_probe_vectors_unsandboxed_baseline` lỗi vì probe gọi `msvcrt.open`, symbol này không có trong Windows CRT.
-- Demo `agent.gateway`, `agent.guardrails`, `agent.strategy`, `eval.prosecute`: đều hoàn thành với exit code 0.
-- `python validate_deck.py`: 15 FAIL, 6 WARN khi chạy fixture world. Validator tự ghi nhận fixture thiếu world corpus thật; các anchor/drift và lethality chưa được kiểm chứng với release world.
+## World và kiểm tra
 
-## World validation and remaining environment notes
+- Tải release `world-df8c55dabb35` từ repo riêng tư chính thức. SHA-256 khớp checksum: `e05327c0bd88b2b1ee9c9194a4bee5535964360d97d462144773d02686705810`. Đã kiểm tra archive không có đường dẫn nguy hiểm hoặc `truth.json`; world có 12.375 trang. ZIP/checksum không được giữ lại trong repo; world nằm trong thư mục bị Git ignore.
+- `make doctor` chạy thành công trong WSL Ubuntu với Python 3.12.15 và GNU Make tạm thời: `ready to spar.` Validator báo 0 FAIL, 1 WARN (`R8-lethality-band`, cần bằng chứng spar). Dòng tổng số trang của Makefile hiện in 24.750 vì cộng cả `__total__` lẫn các bộ đếm loại trang; manifest và tổng các bộ đếm đều xác nhận 12.375. Không sửa thư mục `kit/`.
+- `validate_deck.py` với world thật: 0 FAIL, 1 WARN.
+- Spar toàn trận: thắng `rookie` 100–0 và `adversary` 49–0. Một số tình huống `protocol_misuse` còn trong MISSED do giới hạn chỉ một claim mỗi nhóm; prosecutor dùng slot nhóm A cho `enforcement_failure`.
+- Gateway focused checks: foreign Learner bị deny; Learner khớp `ctx.act` được admit; wildcard `registry.list_servers` và `glossary.list_terms` được rewrite lần lượt thành `name` và `term`.
+- Bộ test đầy đủ trên WSL/Python 3.12.15: **4.608 passed, 7 skipped, 0 failed**. Các skip được pytest báo cáo; kiểm thử có corpus `.tex` không chạy vì các file nguồn đó không có trong gói world.
+- Demo `agent.gateway`, `agent.guardrails`, `agent.strategy`, `eval.prosecute` và `git diff --check` đều thành công.
 
-- Authenticated to the upstream private repo `VinUni-AI20k/Day26-Colosseum-Agent-Arena-Kit` and downloaded release `world-df8c55dabb35`. SHA-256 matched the published checksum: `e05327c0bd88b2b1ee9c9194a4bee5535964360d97d462144773d02686705810`. The archive had no unsafe paths or `truth.json`; it was extracted to `kit/world/df8c55dabb35/` (12,375 pages). The downloaded ZIP and checksum files were removed after verification.
-- Equivalent `make doctor` checks passed individually: `kit.gate_no_key` PASS, referee 17 classes/local-only, world manifest/count/no-truth checks passed, and real-world deck validation reported 0 FAIL and 1 WARN (`R8-lethality-band`, which asks for spar evidence). GNU `make` is unavailable in this PowerShell environment, so the Make target itself was not invoked.
-- `spar.py --bot rookie --as all`: YOU won 100-0. `spar.py --bot adversary --as all`: YOU won 49-0. The MISSED list still included protocol_misuse claims; the prosecutor submits one claim per rubric family, so it used the family-A slot for higher-weight enforcement_failure.
-- After repairing a missing closing docstring in `agent/gateway.py`, `py_compile`, the gateway demo, and prosecution demo passed. Full pytest on the available Python 3.11: 4,607 passed, 5 skipped, 3 failed. Two failures assume the repo is nested under the instructor ai20k workspace; the third calls `msvcrt.open`, which is unavailable on Windows. `pyproject.toml` requires Python 3.12, but this environment's venv is Python 3.11.
+## Còn cần lưu ý
+
+- `R8-lethality-band` là cảnh báo validator về proxy tĩnh; kết quả spar ở trên là bằng chứng chạy thực tế với hai bot, không chứng minh chiến thắng với mọi đối thủ.
+- Guardrail helpers cần được tích hợp vào wrapper tạo ANSWER nếu muốn áp dụng tự động; harness hiện không gọi chúng.
+- `make` không có sẵn trong PowerShell trên máy này. Doctor được chạy trong WSL; Python Windows mặc định là 3.11, vì vậy dùng Python 3.12 cho kiểm tra theo yêu cầu dự án.
