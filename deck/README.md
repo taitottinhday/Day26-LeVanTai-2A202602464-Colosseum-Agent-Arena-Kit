@@ -145,14 +145,15 @@ even though it is not literally named `replica_flip` (`validate_deck.py`'s `R5b`
 **`deck/lineup.json`** plays all 10 attacks, none of the 4 blanks, in this order:
 
 ```
-atk_05 (schema_bomb, cheap opener) → atk_01 (shadow) → atk_04 (poisoned_result) →
-atk_08 (forged_card) → atk_03 (drift) → atk_09 (faithless_peer) → atk_06 (header_spoof) →
-atk_02 (replica_flip) → atk_10 (identity/aud) → atk_07 (identity/act, CONTRACTS' own worked case, saved for last)
+atk_05 (schema_bomb, cheap opener) → atk_07 (identity/act) → atk_06 (header_spoof) →
+atk_01 (shadow) → atk_08 (forged_card) → atk_02 (replica_flip) → atk_09 (faithless_peer) →
+atk_03 (drift) → atk_10 (identity/aud) → atk_04 (poisoned_result)
 ```
 
-Layers alternate deliberately (MCP, MCP, MCP, A2A, MCP, A2A, gateway, gateway, A2A, A2A) so a
-defender who hardens against whatever landed last round is still exposed the next. **Benching
-all 4 blanks is this starter's own aggressive choice, not a rule** — trading an attack for a
+The lineup opens with the catalog trap, then rotates through A2A and gateway cards before
+returning to MCP. That makes the first exchange test whether a defender avoids an unnecessary
+catalog read, then changes the layer often enough to test whether its policy generalizes. **Benching
+all 4 blanks is this deck's aggressive choice, not a rule** — trading an attack for a
 blank, and where in the order to place it, is exactly the strategic lever RULES.md's blank
 mechanic creates. Pull it if your own deck wants to bait a false positive instead.
 
