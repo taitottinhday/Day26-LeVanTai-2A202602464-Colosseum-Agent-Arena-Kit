@@ -368,6 +368,7 @@ class Gateway:
 
         This gateway applies route, admission, authority, and budget checks
         before constructing the only call the arena may execute.
+        """
         self._telemetry.decision_seen(cmd)
 
         # ------------------------------------------------------------------
